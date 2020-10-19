@@ -119,7 +119,8 @@ public class Main {
 				System.out.println("aqui");
 			}
 			
-			crossover(populacao.get(pai1), populacao.get(pai2), destinos, enlaces, delayMax, origem);
+			Arvore arvore = crossover(populacao.get(pai1), populacao.get(pai2), destinos, enlaces, delayMax, origem);
+			mutacao(arvore, destinos, enlaces, delayMax, origem);
 		}
 	}
 	
@@ -247,8 +248,11 @@ public class Main {
 		List<Arvore> floresta = quebrarArvoreCrossover(pai1, pai2, destinos);
 		Dijkstra dijkstra = new Dijkstra();
 		Random rand = new Random();
+		int cont = 0;
 		
 		while(floresta.size() > 1) {
+			
+			System.out.println("Contagem: " + cont);
 			int arvore1 = rand.nextInt(floresta.size());
 			int arvore2 = rand.nextInt(floresta.size());
 			while(arvore1 == arvore2) {
@@ -263,9 +267,7 @@ public class Main {
 				adjacencia2 = aux1;
 			}
 			
-			verificarRepeticao(adjacencia1, adjacencia2);
-			
-			System.out.println("Adjacencia 1: ");
+			/*System.out.println("Adjacencia 1: ");
 			for(Adjacencia ad : adjacencia1) {
 				System.out.print(ad.getValor()+": ");
 				for(Integer aux : ad.getAdjacencias()) {
@@ -283,7 +285,29 @@ public class Main {
 				}
 				System.out.println();
 			}
+			System.out.println();*/
+			
+			verificarRepeticao(adjacencia1, adjacencia2);
+			
+			/*System.out.println("Adjacencia 1: ");
+			for(Adjacencia ad : adjacencia1) {
+				System.out.print(ad.getValor()+": ");
+				for(Integer aux : ad.getAdjacencias()) {
+					System.out.print(aux+", ");
+				}
+				System.out.println();
+			}
 			System.out.println();
+			
+			System.out.println("Adjacencia 2: ");
+			for(Adjacencia ad : adjacencia2) {
+				System.out.print(ad.getValor()+": ");
+				for(Integer aux : ad.getAdjacencias()) {
+					System.out.print(aux+", ");
+				}
+				System.out.println();
+			}
+			System.out.println();*/
 			
 			if(!adjacencia2.isEmpty()) {
 			
@@ -334,11 +358,11 @@ public class Main {
 				} else {
 					menorCaminho= dijkstra.encontrarMenorCaminhoDijkstraCusto(grafoAux, aux1, aux2);
 				}
-				System.out.print("Menor Caminho: ");
+				/*System.out.print("Menor Caminho: ");
 				for(Vertice v : menorCaminho) {
 					System.out.print(v.getDescricao()+", ");
 				}
-				System.out.println();
+				System.out.println(); */
 				List<Adjacencia> fusao = juntarListasAdjacencias(adjacencia1, adjacencia2, menorCaminho, origem, grafoAux);
 				if(arvore1 < arvore2) {
 					floresta.remove(arvore2);
@@ -358,8 +382,200 @@ public class Main {
 				}
 				floresta.add(adjacenteParaArvore(adjacencia1));
 			}
+			cont++;
 		}
+		floresta.get(0).getRaiz().limpaArvore(destinos);
 		return floresta.get(0);
+	}
+	
+	public static Arvore mutacao(Arvore filho, int[] destinos, List<Enlace> enlaces, int delayMax, int origem) {
+		List<Arvore> floresta = quebraArvoreMutacao(filho, destinos);
+		return null;
+	}
+	
+	public static List<Arvore> quebraArvoreMutacao(Arvore arvore, int[] destinos) {
+		List<Arvore> floresta = new ArrayList<>();
+		List<Adjacencia> listaAdjacencia = montarListaAdjacencias(arvore.getRaiz(), new ArrayList<Adjacencia>(), new ArrayList<Integer>());
+		
+		for(Adjacencia ad : listaAdjacencia) {
+			System.out.print(ad.getValor()+": ");
+			for(Integer aux : ad.getAdjacencias()) {
+				System.out.print(aux+", ");
+			}
+			System.out.println();
+		}
+		System.out.println();
+		
+		Random rand = new Random();
+		int corte1 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
+		int corte2 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
+		while(corte1 == corte2) {
+			corte2 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
+		}
+		System.out.println(corte1);
+		System.out.println(corte2);
+		int valorCorte2 = listaAdjacencia.get(corte2).getValor();
+		
+		if(listaAdjacencia.get(corte1).getAdjacencias().isEmpty()) {
+			for(int i = 0; i < destinos.length; i++) {
+				if(destinos[i] == listaAdjacencia.get(corte1).getValor()) {
+					Arvore subArvore = new Arvore(destinos[i]);
+					floresta.add(subArvore);
+					break;
+				}
+			}
+			int remover = -1;
+			List<Integer> excluirFilhos = new ArrayList<>();
+			for(int i = 0; i < listaAdjacencia.size(); i++) {
+				if(listaAdjacencia.get(i).getValor() == listaAdjacencia.get(corte1).getValor()) {
+					remover = i;
+				}
+				for(int j = 0; j < listaAdjacencia.get(i).getAdjacencias().size(); j++) {
+					if(listaAdjacencia.get(i).getAdjacencias().get(j) == listaAdjacencia.get(corte1).getValor()) {
+						excluirFilhos.add(j);
+					}
+				}
+				for(int j = excluirFilhos.size(); j > 0; j--) {
+					int aux = excluirFilhos.get(j-1);
+					listaAdjacencia.get(i).getAdjacencias().remove(aux);
+				}
+				excluirFilhos = new ArrayList<Integer>();
+			}
+			listaAdjacencia.remove(remover);
+			floresta.add(adjacenteParaArvore(listaAdjacencia));
+		} else {
+			List<Integer> deletar = new ArrayList<>();
+			for(Integer aux : listaAdjacencia.get(corte1).getAdjacencias()) {
+				Arvore subArvore = new Arvore(aux);
+				floresta.add(subArvore);
+			}
+			int remover = -1;
+			List<Integer> excluirFilhos = new ArrayList<>();
+			for(int i = 0; i < listaAdjacencia.size(); i++) {
+				if(listaAdjacencia.get(i).getValor() == listaAdjacencia.get(corte1).getValor()) {
+					remover = i;
+				}
+				for(int j = 0; j < listaAdjacencia.get(i).getAdjacencias().size(); j++) {
+					if(listaAdjacencia.get(i).getAdjacencias().get(j) == listaAdjacencia.get(corte1).getValor()) {
+						for(int k = 0; k < listaAdjacencia.get(i).getAdjacencias().size(); k++) {
+							deletar.add(listaAdjacencia.get(i).getAdjacencias().get(k));
+						}
+						excluirFilhos.add(j);
+					}
+				}
+				for(int j = excluirFilhos.size(); j > 0; j--) {
+					int aux = excluirFilhos.get(j-1);
+					listaAdjacencia.get(i).getAdjacencias().remove(aux);
+				}
+				excluirFilhos = new ArrayList<>();
+			}
+			listaAdjacencia.remove(remover);
+			while(!deletar.isEmpty()) {
+				remover = -1;
+				for(int i = 0; i < listaAdjacencia.size(); i++) {
+					if(listaAdjacencia.get(i).getValor() == deletar.get(0)) {
+						remover = i;
+						if(!listaAdjacencia.get(i).getAdjacencias().isEmpty()) {
+							for(int j = 0; j < listaAdjacencia.get(i).getAdjacencias().size(); j++) {
+								if(!deletar.contains(listaAdjacencia.get(i).getAdjacencias().get(j))) {
+									deletar.add(listaAdjacencia.get(i).getAdjacencias().get(j));
+								}
+							}
+						}
+						listaAdjacencia.remove(remover);
+					}
+				}
+				deletar.remove(0);
+			}
+			floresta.add(adjacenteParaArvore(listaAdjacencia));
+		}
+		
+		for(Arvore ar : floresta) {
+			List<Adjacencia> adjacencia = montarListaAdjacencias(ar.getRaiz(), new ArrayList<Adjacencia>(), new ArrayList<Integer>());
+			if(verificaValorLista(adjacencia, valorCorte2)) {
+				int posicaoCorte = -1;
+				for(int i = 0; i < adjacencia.size(); i++) {
+					if(adjacencia.get(i).getValor() == valorCorte2) {
+						posicaoCorte = i;
+					}
+				}
+				if(adjacencia.get(posicaoCorte).getAdjacencias().isEmpty()) {
+					for(int i = 0; i < destinos.length; i++) {
+						if(destinos[i] == adjacencia.get(posicaoCorte).getValor()) {
+							Arvore subArvore = new Arvore(destinos[i]);
+							floresta.add(subArvore);
+							break;
+						}
+					}
+					int remover = -1;
+					List<Integer> excluirFilhos = new ArrayList<>();
+					for(int i = 0; i < adjacencia.size(); i++) {
+						if(adjacencia.get(i).getValor() == adjacencia.get(posicaoCorte).getValor()) {
+							remover = i;
+						}
+						for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
+							if(adjacencia.get(i).getAdjacencias().get(j) == adjacencia.get(posicaoCorte).getValor()) {
+								excluirFilhos.add(j);
+							}
+						}
+						for(int j = excluirFilhos.size(); j > 0; j--) {
+							int aux = excluirFilhos.get(j-1);
+							adjacencia.get(i).getAdjacencias().remove(aux);
+						}
+						excluirFilhos = new ArrayList<>();
+					}
+					adjacencia.remove(remover);
+					floresta.add(adjacenteParaArvore(adjacencia));
+				} else {
+					List<Integer> deletar = new ArrayList<>();
+					for(Integer aux : adjacencia.get(posicaoCorte).getAdjacencias()) {
+						Arvore subArvore = new Arvore(aux);
+						floresta.add(subArvore);
+					}
+					int remover = -1;
+					List<Integer> excluirFilhos = new ArrayList<>();
+					for(int i = 0; i < adjacencia.size(); i++) {
+						if(adjacencia.get(i).getValor() == adjacencia.get(posicaoCorte).getValor()) {
+							remover = i;
+						}
+						for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
+							if(adjacencia.get(i).getAdjacencias().get(j) == adjacencia.get(posicaoCorte).getValor()) {
+								for(int k = 0; k < adjacencia.get(i).getAdjacencias().size(); k++) {
+									deletar.add(adjacencia.get(i).getAdjacencias().get(k));
+								}
+								excluirFilhos.add(j);
+							}
+						}
+						for(int j = adjacencia.get(i).getAdjacencias().size(); j > 0; j--) {
+							int aux = excluirFilhos.get(j-1);
+							adjacencia.get(i).getAdjacencias().remove(aux);
+						}
+					}
+					adjacencia.remove(remover);
+					while(!deletar.isEmpty()) {
+						remover = -1;
+						for(int i = 0; i < adjacencia.size(); i++) {
+							if(adjacencia.get(i).getValor() == deletar.get(0)) {
+								remover = i;
+								if(!adjacencia.get(i).getAdjacencias().isEmpty()) {
+									for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
+										if(!deletar.contains(adjacencia.get(i).getAdjacencias().get(j))) {
+											deletar.add(adjacencia.get(i).getAdjacencias().get(j));
+										}
+									}
+								}
+								adjacencia.remove(remover);
+								deletar.get(0);
+							}
+						}
+					}
+					floresta.add(adjacenteParaArvore(listaAdjacencia));
+				}
+				break;
+			}
+		}
+		
+		return floresta;
 	}
 	
 	public static void verificarRepeticao(List<Adjacencia> lista1, List<Adjacencia> lista2) {
@@ -374,7 +590,7 @@ public class Main {
 					adjacenteRepetido = ad2;
 					listaRepetidos.add(ad2.getValor());
 					for(Integer aux : ad2.getAdjacencias()) {
-						if(!verificaFilhosIguais(lista1, ad2.getAdjacencias())) {
+						if(!verificaFilhosIguais(lista1, aux)) {
 							ad1.getAdjacencias().add(aux);
 							if(!ad2.getAdjacencias().isEmpty()) {
 								verificados.add(aux);
@@ -415,13 +631,14 @@ public class Main {
 					}
 				}
 				for(int i = apagados.size(); i > 0; i--) {
-					ad.getAdjacencias().remove(apagados.get(i-1));
+					int aux = apagados.get(i-1);
+					ad.getAdjacencias().remove(aux);
 				}
 			}
 			listaRepetidos.remove(0);
 		}
 		if(!lista2.isEmpty()) {
-			List<Integer> excluir = new ArrayList<Integer>();
+			List<Integer> excluir = new ArrayList<>();
 			for(int i = 0; i < lista2.get(0).getAdjacencias().size(); i++) {
 				for(Adjacencia ad1 : lista1) {
 					if(ad1.getValor() == lista2.get(0).getAdjacencias().get(i)) {
@@ -430,18 +647,17 @@ public class Main {
 				}
 			}
 			for(int i = excluir.size(); i > 0; i--) {
-				lista2.get(0).getAdjacencias().remove(i-1);
+				int aux = excluir.get(i-1);
+				lista2.get(0).getAdjacencias().remove(aux);
 			}
 		}
 	}
 	
-	public static boolean verificaFilhosIguais(List<Adjacencia> lista1, List<Integer> lista2) {
+	public static boolean verificaFilhosIguais(List<Adjacencia> lista1, int valor) {
 		for(Adjacencia ad1 : lista1) {
 			for(Integer aux1 : ad1.getAdjacencias()) {
-				for(Integer aux2 : lista2) {
-					if(aux1 == aux2) {
-						return true;
-					}
+				if(aux1 == valor) {
+					return true;
 				}
 			}
 		}
@@ -449,6 +665,7 @@ public class Main {
 	}
 	
 	public static List<Adjacencia> juntarListasAdjacencias(List<Adjacencia> adjacencia1, List<Adjacencia> adjacencia2, List<Vertice> menorCaminho, int origem, Grafo grafo) {
+		
 		List<Integer> nosNaoVerificados = new ArrayList<Integer>();
 		List<Adjacencia> listaAdjacencia = new ArrayList<Adjacencia>();
 		verificaRaizOrigem(adjacencia1, origem);
@@ -470,49 +687,43 @@ public class Main {
 							}
 							ad.getAdjacencias().add(Integer.valueOf(menorCaminho.get(i+2).getDescricao()));
 							aux = new Adjacencia();
+							aux.setAdjacencias(new ArrayList<Integer>());
 							aux.setValor(Integer.valueOf(menorCaminho.get(i+2).getDescricao()));
 							listaAdjacencia.add(aux);
 						} else if("aux2".equals(menorCaminho.get(i+1).getDescricao())) {
+							boolean encontrouNaoRaix = false;
+							//Se o no do menor caminho NÃO for raiz
 							for(Adjacencia ad2: adjacencia2) {
-								if(menorCaminho.get(i+2).getDescricao().equals(String.valueOf(ad2.getValor()))) {
-									if(ad2.getAdjacencias() == null || ad2.getAdjacencias().isEmpty()) {
+								for(int k = 0; k < ad2.getAdjacencias().size(); k++) {
+									if(menorCaminho.get(i+2).getDescricao().equals(String.valueOf(ad2.getAdjacencias().get(k)))) {
+										encontrouNaoRaix = true;
+										ad.getAdjacencias().add(ad2.getAdjacencias().get(k));
+										aux = new Adjacencia();
+										aux.setAdjacencias(new ArrayList<Integer>());
+										for(Adjacencia ad3 : adjacencia2) {
+											if(ad3.getValor() == ad2.getAdjacencias().get(k)) {
+												aux.setAdjacencias(ad3.getAdjacencias());
+											}
+										}
+										aux.setValor(ad2.getAdjacencias().get(k));
+										listaAdjacencia.add(aux);
 										for(int j = 0; j < nosNaoVerificados.size(); j++) {
-											if(nosNaoVerificados.get(j) == ad2.getValor()) {
+											if(nosNaoVerificados.get(j) == ad2.getAdjacencias().get(k)) {
 												nosNaoVerificados.remove(j);
 												break;
 											}
 										}
-										if(ad.getAdjacencias() == null) {
-											ad.setAdjacencias(new ArrayList<Integer>());
-										}
-										if(nosNaoVerificados.isEmpty()) {
-											ad.getAdjacencias().add(ad2.getValor());
-											aux = new Adjacencia();
-											aux.setValor(ad2.getValor());
-											aux.setAdjacencias(ad2.getAdjacencias());
-											listaAdjacencia.add(aux);
-										} else {
-											for(Adjacencia ad3 : adjacencia2) {
-												for(int j = 0; j < ad3.getAdjacencias().size(); j++) {
-													if(ad3.getAdjacencias().get(j) == ad2.getValor()) {
-														aux = new Adjacencia();
-														aux.setValor(ad3.getAdjacencias().get(j));
-														aux.setAdjacencias(new ArrayList<Integer>());
-														aux.getAdjacencias().add(ad3.getValor());
-														ad3.getAdjacencias().remove(j);
-														break;
-													}
-												}
-											}
-										}
-									} else {
-										if(ad.getAdjacencias() == null || ad2.getAdjacencias().isEmpty()) {
-											ad.setAdjacencias(new ArrayList<>());
-										}
+									}
+								}
+							}
+							//Se o no do menor caminho for raiz
+							if(!encontrouNaoRaix) {
+								for(Adjacencia ad2: adjacencia2) {
+									if(menorCaminho.get(i+2).getDescricao().equals(String.valueOf(ad2.getValor()))) {
 										ad.getAdjacencias().add(ad2.getValor());
 										aux = new Adjacencia();
-										aux.setValor(ad2.getValor());
 										aux.setAdjacencias(ad2.getAdjacencias());
+										aux.setValor(ad2.getValor());
 										listaAdjacencia.add(aux);
 										for(int j = 0; j < nosNaoVerificados.size(); j++) {
 											if(nosNaoVerificados.get(j) == ad2.getValor()) {
@@ -523,47 +734,40 @@ public class Main {
 									}
 								}
 							}
+							
 							while(!nosNaoVerificados.isEmpty()) {
 								for(Adjacencia ad2: adjacencia2) {
-									if(nosNaoVerificados.contains(ad2.getValor())) {
-										if(ad2.getAdjacencias() == null || ad2.getAdjacencias().isEmpty()) {
-											if(ad.getAdjacencias() == null) {
-												ad.setAdjacencias(new ArrayList<Integer>());											
+									if(!verificaValorPai(listaAdjacencia, ad2.getValor()) && verificaValorFilho(listaAdjacencia, ad2.getValor()) && nosNaoVerificados.contains(ad2.getValor())) {
+										aux = new Adjacencia();
+										aux.setAdjacencias(ad2.getAdjacencias());
+										aux.setValor(ad2.getValor());
+										listaAdjacencia.add(aux);
+										for(int j = 0; j < nosNaoVerificados.size(); j++) {
+											if(nosNaoVerificados.get(j) == ad2.getValor()) {
+												nosNaoVerificados.remove(j);
+												break;
 											}
-											if(nosNaoVerificados.isEmpty()) {
-												ad.getAdjacencias().add(ad2.getValor());
-												aux = new Adjacencia();
-												aux.setValor(ad2.getValor());
-												aux.setAdjacencias(ad2.getAdjacencias());
-												listaAdjacencia.add(aux);
-												for(int j = 0; j < nosNaoVerificados.size(); j++) {
-													if(nosNaoVerificados.get(j) == ad2.getValor()) {
-														nosNaoVerificados.remove(j);
-														break;
+										}
+									} else if(!verificaValorPai(listaAdjacencia, ad2.getValor()) && !verificaValorFilho(listaAdjacencia, ad2.getValor()) && nosNaoVerificados.contains(ad2.getValor())) {
+										for(Integer aux2 : ad2.getAdjacencias()) {
+											for(Adjacencia ad3 : listaAdjacencia) {
+												if(aux2 == ad3.getValor()) {
+													ad3.getAdjacencias().add(ad2.getValor());
+													aux = new Adjacencia();
+													aux.setAdjacencias(new ArrayList<Integer>());
+													for(Integer aux3 : ad2.getAdjacencias()) {
+														if(aux3 != aux2) {
+															aux.getAdjacencias().add(aux3);
+														}
 													}
-												}
-											} else {
-												for(Adjacencia ad3 : adjacencia2) {
-													for(int j = 0; j < ad3.getAdjacencias().size(); j++) {
-														if(ad3.getAdjacencias().get(j) == ad2.getValor()) {
-															aux = new Adjacencia();
-															aux.setValor(ad3.getAdjacencias().get(j));
-															aux.setAdjacencias(new ArrayList<Integer>());
-															aux.getAdjacencias().add(ad3.getValor());
-															ad3.getAdjacencias().remove(j);
+													aux.setValor(ad2.getValor());
+													listaAdjacencia.add(aux);
+													for(int j = 0; j < nosNaoVerificados.size(); j++) {
+														if(nosNaoVerificados.get(j) == ad2.getValor()) {
+															nosNaoVerificados.remove(j);
 															break;
 														}
 													}
-												}
-											}
-										} else {
-											aux = new Adjacencia();
-											aux.setValor(ad2.getValor());
-											aux.setAdjacencias(ad2.getAdjacencias());
-											listaAdjacencia.add(aux);
-											for(int j = 0; j < nosNaoVerificados.size(); j++) {
-												if(nosNaoVerificados.get(j) == ad2.getValor()) {
-													nosNaoVerificados.remove(j);
 													break;
 												}
 											}
@@ -572,43 +776,39 @@ public class Main {
 								}
 							}
 						} else if("aux1".equals(menorCaminho.get(i+1).getDescricao()) && ("aux2".equals(menorCaminho.get(i+2).getDescricao()))) {
+							boolean encontrouNaoRaix = false;
+							//Se o no do menor caminho NÃO for raiz
 							for(Adjacencia ad2: adjacencia2) {
-								if(menorCaminho.get(i+3).getDescricao().equals(String.valueOf(ad2.getValor()))) {
-									if(ad2.getAdjacencias() == null || ad2.getAdjacencias().isEmpty()) {
-										if(ad.getAdjacencias() == null) {
-											ad.setAdjacencias(new ArrayList<Integer>());											
+								for(int k = 0; k < ad2.getAdjacencias().size(); k++) {
+									if(menorCaminho.get(i+3).getDescricao().equals(String.valueOf(ad2.getAdjacencias().get(k)))) {
+										encontrouNaoRaix = true;
+										ad.getAdjacencias().add(ad2.getAdjacencias().get(k));
+										aux = new Adjacencia();
+										aux.setAdjacencias(new ArrayList<Integer>());
+										for(Adjacencia ad3 : adjacencia2) {
+											if(ad3.getValor() == ad2.getAdjacencias().get(k)) {
+												aux.setAdjacencias(ad3.getAdjacencias());
+											}
 										}
+										aux.setValor(ad2.getAdjacencias().get(k));
+										listaAdjacencia.add(aux);
 										for(int j = 0; j < nosNaoVerificados.size(); j++) {
-											if(nosNaoVerificados.get(j) == ad2.getValor()) {
+											if(nosNaoVerificados.get(j) == ad2.getAdjacencias().get(k)) {
 												nosNaoVerificados.remove(j);
 												break;
 											}
 										}
-										if(nosNaoVerificados.isEmpty()) {
-											ad.getAdjacencias().add(ad2.getValor());
-											aux = new Adjacencia();
-											aux.setValor(ad2.getValor());
-											aux.setAdjacencias(ad2.getAdjacencias());
-											listaAdjacencia.add(aux);
-										} else {
-											for(Adjacencia ad3 : adjacencia2) {
-												for(int j = 0; j < ad3.getAdjacencias().size(); j++) {
-													if(ad3.getAdjacencias().get(j) == ad2.getValor()) {
-														aux = new Adjacencia();
-														aux.setValor(ad3.getAdjacencias().get(j));
-														aux.setAdjacencias(new ArrayList<Integer>());
-														aux.getAdjacencias().add(ad3.getValor());
-														ad3.getAdjacencias().remove(j);
-														break;
-													}
-												}
-											}
-										}
-									} else {
+									}
+								}
+							}
+							//Se o no do menor caminho for raiz
+							if(!encontrouNaoRaix) {
+								for(Adjacencia ad2: adjacencia2) {
+									if(menorCaminho.get(i+3).getDescricao().equals(String.valueOf(ad2.getValor()))) {
 										ad.getAdjacencias().add(ad2.getValor());
 										aux = new Adjacencia();
-										aux.setValor(ad2.getValor());
 										aux.setAdjacencias(ad2.getAdjacencias());
+										aux.setValor(ad2.getValor());
 										listaAdjacencia.add(aux);
 										for(int j = 0; j < nosNaoVerificados.size(); j++) {
 											if(nosNaoVerificados.get(j) == ad2.getValor()) {
@@ -619,47 +819,40 @@ public class Main {
 									}
 								}
 							}
+							
 							while(!nosNaoVerificados.isEmpty()) {
 								for(Adjacencia ad2: adjacencia2) {
-									if(nosNaoVerificados.contains(ad2.getValor())) {
-										if(ad2.getAdjacencias() == null || ad2.getAdjacencias().isEmpty()) {
-											if(ad.getAdjacencias() == null) {
-												ad.setAdjacencias(new ArrayList<Integer>());
+									if(!verificaValorPai(listaAdjacencia, ad2.getValor()) && verificaValorFilho(listaAdjacencia, ad2.getValor()) && nosNaoVerificados.contains(ad2.getValor())) {
+										aux = new Adjacencia();
+										aux.setAdjacencias(ad2.getAdjacencias());
+										aux.setValor(ad2.getValor());
+										listaAdjacencia.add(aux);
+										for(int j = 0; j < nosNaoVerificados.size(); j++) {
+											if(nosNaoVerificados.get(j) == ad2.getValor()) {
+												nosNaoVerificados.remove(j);
+												break;
 											}
-											if(nosNaoVerificados.isEmpty()) {
-												ad.getAdjacencias().add(ad2.getValor());
-												aux = new Adjacencia();
-												aux.setValor(ad2.getValor());
-												aux.setAdjacencias(ad2.getAdjacencias());
-												listaAdjacencia.add(aux);
-												for(int j = 0; j < nosNaoVerificados.size(); j++) {
-													if(nosNaoVerificados.get(j) == ad2.getValor()) {
-														nosNaoVerificados.remove(j);
-														break;
+										}
+									} else if(!verificaValorPai(listaAdjacencia, ad2.getValor()) && !verificaValorFilho(listaAdjacencia, ad2.getValor()) && nosNaoVerificados.contains(ad2.getValor())) {
+										for(Integer aux2 : ad2.getAdjacencias()) {
+											for(Adjacencia ad3 : listaAdjacencia) {
+												if(aux2 == ad3.getValor()) {
+													ad3.getAdjacencias().add(ad2.getValor());
+													aux = new Adjacencia();
+													aux.setAdjacencias(new ArrayList<Integer>());
+													for(Integer aux3 : ad2.getAdjacencias()) {
+														if(aux3 != aux2) {
+															aux.getAdjacencias().add(aux3);
+														}
 													}
-												}
-											} else {
-												for(Adjacencia ad3 : adjacencia2) {
-													for(int j = 0; j < ad3.getAdjacencias().size(); j++) {
-														if(ad3.getAdjacencias().get(j) == ad2.getValor()) {
-															aux = new Adjacencia();
-															aux.setValor(ad3.getAdjacencias().get(j));
-															aux.setAdjacencias(new ArrayList<Integer>());
-															aux.getAdjacencias().add(ad3.getValor());
-															ad3.getAdjacencias().remove(j);
+													aux.setValor(ad2.getValor());
+													listaAdjacencia.add(aux);
+													for(int j = 0; j < nosNaoVerificados.size(); j++) {
+														if(nosNaoVerificados.get(j) == ad2.getValor()) {
+															nosNaoVerificados.remove(j);
 															break;
 														}
 													}
-												}
-											}
-										} else {
-											aux = new Adjacencia();
-											aux.setValor(ad2.getValor());
-											aux.setAdjacencias(ad2.getAdjacencias());
-											listaAdjacencia.add(aux);
-											for(int j = 0; j < nosNaoVerificados.size(); j++) {
-												if(nosNaoVerificados.get(j) == ad2.getValor()) {
-													nosNaoVerificados.remove(j);
 													break;
 												}
 											}
@@ -673,6 +866,7 @@ public class Main {
 							}
 							ad.getAdjacencias().add(Integer.valueOf(menorCaminho.get(i+1).getDescricao()));
 							aux = new Adjacencia();
+							aux.setAdjacencias(new ArrayList<Integer>());
 							aux.setValor(Integer.valueOf(menorCaminho.get(i+1).getDescricao()));
 							listaAdjacencia.add(aux);
 						}
@@ -683,22 +877,73 @@ public class Main {
 				adjacencia1.add(aux);
 			}
 		}
+		verificaRaizOrigem(listaAdjacencia, origem);
+		System.out.println("Adjacencia merge: ");
+		for(Adjacencia ad : listaAdjacencia) {
+			System.out.print(ad.getValor()+": ");
+			for(Integer aux : ad.getAdjacencias()) {
+				System.out.print(aux+", ");
+			}
+			System.out.println();
+		}
+		System.out.println();
 		return listaAdjacencia;
+	}
+	
+	public static boolean verificaValorLista(List<Adjacencia> lista, int valor) {
+		for(Adjacencia ad : lista) {
+			if(ad.getValor() == valor) {
+				return true;
+			} else {
+				for(Integer aux : ad.getAdjacencias()) {
+					if(aux == valor) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+	
+	public static boolean verificaValorPai(List<Adjacencia> lista, int valor) {
+		for(Adjacencia ad : lista) {
+			if(ad.getValor() == valor) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public static boolean verificaValorFilho(List<Adjacencia> lista, int valor) {
+		for(Adjacencia ad : lista) {
+			for(Integer aux : ad.getAdjacencias()) {
+				if(aux == valor) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 	
 	public static void verificaRaizOrigem(List<Adjacencia> lista, int origem) {
 		if(origem != lista.get(0).getValor()) {
+			boolean trocado = false;
 			for(Adjacencia ad : lista) {
 				if(ad.getValor() == origem) {
 					for(int i = 0; i < lista.size(); i++) {
 						for(int j = 0; j < lista.get(i).getAdjacencias().size(); j++) {
 							if(lista.get(i).getAdjacencias().get(j) == origem) {
 								lista.get(i).getAdjacencias().remove(j);
+								ad.getAdjacencias().add(lista.get(i).getValor());
 								Adjacencia aux = lista.get(i);
 								lista.remove(i);
 								lista.add(aux);
+								trocado = true;
 							}
 						}
+					}
+					if(trocado) {
+						break;
 					}
 				}
 			}
