@@ -74,8 +74,9 @@ public class No {
 	
 	public int calculaCusto() {
 		int soma = 0;
+		soma = soma + this.custo;
 		for(No no : this.filhos) {
-			soma = soma + this.custo + no.calculaCusto();
+			soma = soma + no.calculaCusto();
 		}
 		if(this.filhos.isEmpty()) {
 			return this.custo;
@@ -94,6 +95,23 @@ public class No {
 			}
 		}
 		return soma;
+	}
+	
+	public void preencheDelayCustoNo(Grafo grafo, No antecessor) {
+		for(Vertice v : grafo.getVertices()) {
+			if(Integer.valueOf(v.getDescricao()) == antecessor.getValor()) {
+				for(Aresta a : v.getArestas()) {
+					if(Integer.valueOf(a.getDestino().getDescricao()) == this.getValor()) {
+						this.setCusto(a.getCusto());
+						this.setDelay(a.getDelay());
+						break;
+					}
+				}
+			}
+		}
+		for(No no : this.getFilhos()) {
+			no.preencheDelayCustoNo(grafo, this);
+		}
 	}
 	
 	public int getValor() {

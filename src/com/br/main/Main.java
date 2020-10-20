@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -19,6 +20,7 @@ public class Main {
 		int quantidadePopulacao = 50;
 		int numeroGeracoes = 50;
 		int numeroFilhos = 20;
+		int taxaMutacao = 10;
 		
 		List<Enlace> roteadores = lerArquivoRoteamento("Roteamento.txt");
 		
@@ -27,7 +29,22 @@ public class Main {
 			avaliaIndividuo(arvore, destinos, delayMax);
 		}
 		
-		ag(populacao, numeroGeracoes, numeroFilhos, destinos, roteadores, delayMax, origem);
+		ag(populacao, numeroGeracoes, numeroFilhos, destinos, roteadores, delayMax, origem, taxaMutacao);
+		Collections.sort(populacao);
+		
+		List<Adjacencia> melhor = montarListaAdjacencias(populacao.get(0).getRaiz(), new ArrayList<>(), new ArrayList<>());
+		
+		System.out.println("Melhor Individuo: ");
+		for(Adjacencia ad : melhor) {
+			System.out.print(ad.getValor()+": ");
+			for(Integer aux : ad.getAdjacencias()) {
+				System.out.print(aux+", ");
+			}
+			System.out.println();
+		}
+		System.out.println();
+		System.out.println("Custo: " + calculaCusto(populacao.get(0)));
+		System.out.println("Delay: " + delay(populacao.get(0), destinos));
 		System.out.println("FIM");
 	}
 	
@@ -106,21 +123,44 @@ public class Main {
 		return populacao;
 	}
 	
-	public static void ag(List<Arvore> populacao, int numeroGeracoes, int numeroFilhos, int[] destinos, List<Enlace> enlaces, int delayMax, int origem) {
+	public static void ag(List<Arvore> populacao, int numeroGeracoes, int numeroFilhos, int[] destinos, List<Enlace> enlaces, int delayMax, int origem, int taxaMutacao) {
+		Grafo grafo = montarGrafo(enlaces);
 		for(int i = 0; i < numeroGeracoes; i++) {
-			double maxRoleta = montarRoleta(populacao);
-			int pai1 = roleta(populacao, maxRoleta);
-			int pai2 = roleta(populacao, maxRoleta);
+			List<Arvore> filhos = new ArrayList<Arvore>();
 			
-			while(pai1 == pai2) {
-				pai2 = roleta(populacao, maxRoleta);
+			for(int j = 0; j < numeroFilhos; j++) {
+				double maxRoleta = montarRoleta(populacao);
+				int pai1 = roleta(populacao, maxRoleta);
+				int pai2 = roleta(populacao, maxRoleta);
+				
+				while(pai1 == pai2) {
+					pai2 = roleta(populacao, maxRoleta);
+				}
+				
+				Arvore arvore = new Arvore(0);
+				arvore = crossover(populacao.get(pai1), populacao.get(pai2), destinos, enlaces, delayMax, origem);
+				arvore.preencheDelayCustoNos(grafo);
+				
+				Random rand = new Random();
+				int chanceMutacao = rand.nextInt(100);
+				if(chanceMutacao < taxaMutacao) {
+					arvore = mutacao(arvore, destinos, enlaces, delayMax, origem);
+					arvore.preencheDelayCustoNos(grafo);
+					filhos.add(arvore);
+				} else {
+					filhos.add(arvore);
+				}
 			}
-			if(pai1 < 0 || pai2 < 0 || pai1 >= 50 || pai2 >= 50) {
-				System.out.println("aqui");
+			for(Arvore ar : filhos) {
+				avaliaIndividuo(ar, destinos, delayMax);
 			}
-			
-			Arvore arvore = crossover(populacao.get(pai1), populacao.get(pai2), destinos, enlaces, delayMax, origem);
-			mutacao(arvore, destinos, enlaces, delayMax, origem);
+			Collections.sort(populacao);
+			for(int j = populacao.size(); j > populacao.size()/2; j--) {
+				populacao.remove(j-1);
+			}
+			for(int j = 0; j < filhos.size(); j++) {
+				populacao.add(filhos.get(j));
+			}
 		}
 	}
 	
@@ -175,6 +215,14 @@ public class Main {
 			}
 		}
 		return delay;
+	}
+	
+	public static int delay(Arvore arvore, int[] destinos) {
+		int soma = 0;
+		for(int i = 0; i < destinos.length; i++) {
+			soma = arvore.getRaiz().calculaDelay(destinos[i]);
+		}
+		return soma;
 	}
 	
 	public static double montarRoleta(List<Arvore> populacao) {
@@ -248,11 +296,9 @@ public class Main {
 		List<Arvore> floresta = quebrarArvoreCrossover(pai1, pai2, destinos);
 		Dijkstra dijkstra = new Dijkstra();
 		Random rand = new Random();
-		int cont = 0;
 		
 		while(floresta.size() > 1) {
 			
-			System.out.println("Contagem: " + cont);
 			int arvore1 = rand.nextInt(floresta.size());
 			int arvore2 = rand.nextInt(floresta.size());
 			while(arvore1 == arvore2) {
@@ -382,7 +428,6 @@ public class Main {
 				}
 				floresta.add(adjacenteParaArvore(adjacencia1));
 			}
-			cont++;
 		}
 		floresta.get(0).getRaiz().limpaArvore(destinos);
 		return floresta.get(0);
@@ -390,12 +435,182 @@ public class Main {
 	
 	public static Arvore mutacao(Arvore filho, int[] destinos, List<Enlace> enlaces, int delayMax, int origem) {
 		List<Arvore> floresta = quebraArvoreMutacao(filho, destinos);
-		return null;
+		Dijkstra dijkstra = new Dijkstra();
+		Random rand = new Random();
+		
+		while(floresta.size() > 1) {
+			
+			int arvore1 = rand.nextInt(floresta.size());
+			int arvore2 = rand.nextInt(floresta.size());
+			while(arvore1 == arvore2) {
+				arvore2 = rand.nextInt(floresta.size());
+			}
+			List<Adjacencia> adjacencia1 =  montarListaAdjacencias(floresta.get(arvore1).getRaiz(), new ArrayList<>(), new ArrayList<>());
+			List<Adjacencia> adjacencia2 =  montarListaAdjacencias(floresta.get(arvore2).getRaiz(), new ArrayList<>(), new ArrayList<>());
+			
+			if(adjacencia1.get(0).getValor() > adjacencia2.get(0).getValor()) {
+				List<Adjacencia> aux1 = adjacencia1;
+				adjacencia1 = adjacencia2;
+				adjacencia2 = aux1;
+			}
+			
+			verificarRepeticao(adjacencia1, adjacencia2);
+			
+			if(!adjacencia2.isEmpty()) {
+			
+				Grafo grafoAux = montarGrafo(enlaces);
+				List<Aresta> arestas = new ArrayList<Aresta>();
+				List<Vertice> vizinhos = new ArrayList<Vertice>();
+				
+				//Criação do no virtual 1;
+				Vertice aux1 = new Vertice();
+				aux1.setDescricao("aux1");
+				for(Adjacencia adjacencia: adjacencia1) {
+					Vertice vertice = grafoAux.encontrarVertice(String.valueOf(adjacencia.getValor()));
+					Aresta aresta1 = new Aresta(vertice, aux1, 0, 0);
+					vertice.getArestas().add(aresta1);
+					vertice.getVizinhos().add(aux1);
+					
+					Aresta aresta2 = new Aresta(aux1, vertice, 0, 0);
+					arestas.add(aresta2);
+					vizinhos.add(vertice);
+				}
+				aux1.setArestas(arestas);
+				aux1.setVizinhos(vizinhos);
+				arestas = new ArrayList<Aresta>();
+				vizinhos = new ArrayList<Vertice>();
+				
+				//Criação do no virtual 2;
+				Vertice aux2 = new Vertice();
+				aux2.setDescricao("aux2");
+				for(Adjacencia adjacencia: adjacencia2) {
+					Vertice vertice = grafoAux.encontrarVertice(String.valueOf(adjacencia.getValor()));
+					Aresta aresta1 = new Aresta(vertice, aux2, 0, 0);
+					vertice.getArestas().add(aresta1);
+					vertice.getVizinhos().add(aux2);
+					
+					Aresta aresta2 = new Aresta(aux2, vertice, 0, 0);
+					arestas.add(aresta2);
+					vizinhos.add(vertice);
+				}
+				aux2.setArestas(arestas);
+				aux2.setVizinhos(vizinhos);
+				
+				grafoAux.adicionarVertice(aux1);
+				grafoAux.adicionarVertice(aux2);
+				
+				List<Vertice> menorCaminho = new ArrayList<Vertice>();
+				if(calculaDelay(filho, destinos, delayMax) != 1.0) {
+					menorCaminho= dijkstra.encontrarMenorCaminhoDijkstraDelay(grafoAux, aux1, aux2);
+				} else {
+					menorCaminho= dijkstra.encontrarMenorCaminhoDijkstraCusto(grafoAux, aux1, aux2);
+				}
+				List<Adjacencia> fusao = juntarListasAdjacencias(adjacencia1, adjacencia2, menorCaminho, origem, grafoAux);
+				if(arvore1 < arvore2) {
+					floresta.remove(arvore2);
+					floresta.remove(arvore1);
+				} else {
+					floresta.remove(arvore1);
+					floresta.remove(arvore2);
+				}
+				floresta.add(adjacenteParaArvore(fusao));
+			} else {
+				if(arvore1 < arvore2) {
+					floresta.remove(arvore2);
+					floresta.remove(arvore1);
+				} else {
+					floresta.remove(arvore1);
+					floresta.remove(arvore2);
+				}
+				floresta.add(adjacenteParaArvore(adjacencia1));
+			}
+		}
+		floresta.get(0).getRaiz().limpaArvore(destinos);
+		return floresta.get(0);
 	}
 	
 	public static List<Arvore> quebraArvoreMutacao(Arvore arvore, int[] destinos) {
 		List<Arvore> floresta = new ArrayList<>();
 		List<Adjacencia> listaAdjacencia = montarListaAdjacencias(arvore.getRaiz(), new ArrayList<Adjacencia>(), new ArrayList<Integer>());
+		
+		Random rand = new Random();
+		int corte1 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
+		int corte2 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
+		while(corte1 == corte2) {
+			corte2 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
+		}
+		
+		/*listaAdjacencia = new ArrayList<Adjacencia>();
+		Adjacencia mock1 = new Adjacencia();
+		mock1.setValor(1);
+		mock1.setAdjacencias(new ArrayList<Integer>());
+		mock1.getAdjacencias().add(4);
+		mock1.getAdjacencias().add(2);
+		listaAdjacencia.add(mock1);
+		
+		Adjacencia mock2 = new Adjacencia();
+		mock2.setValor(4);
+		mock2.setAdjacencias(new ArrayList<Integer>());
+		mock2.getAdjacencias().add(9);
+		listaAdjacencia.add(mock2);
+		
+		Adjacencia mock3 = new Adjacencia();
+		mock3.setValor(9);
+		mock3.setAdjacencias(new ArrayList<Integer>());
+		listaAdjacencia.add(mock3);
+		
+		Adjacencia mock4 = new Adjacencia();
+		mock4.setValor(2);
+		mock4.setAdjacencias(new ArrayList<Integer>());
+		mock4.getAdjacencias().add(5);
+		listaAdjacencia.add(mock4);
+		
+		Adjacencia mock5 = new Adjacencia();
+		mock5.setValor(5);
+		mock5.setAdjacencias(new ArrayList<Integer>());
+		mock5.getAdjacencias().add(10);
+		mock5.getAdjacencias().add(3);
+		listaAdjacencia.add(mock5);
+		
+		Adjacencia mock6 = new Adjacencia();
+		mock6.setValor(10);
+		mock6.setAdjacencias(new ArrayList<Integer>());
+		listaAdjacencia.add(mock6);
+		
+		Adjacencia mock7 = new Adjacencia();
+		mock7.setValor(3);
+		mock7.setAdjacencias(new ArrayList<Integer>());
+		mock7.getAdjacencias().add(6);
+		listaAdjacencia.add(mock7);
+		
+		Adjacencia mock8 = new Adjacencia();
+		mock8.setValor(6);
+		mock8.setAdjacencias(new ArrayList<Integer>());
+		mock8.getAdjacencias().add(11);
+		listaAdjacencia.add(mock8);
+		
+		Adjacencia mock9 = new Adjacencia();
+		mock9.setValor(11);
+		mock9.setAdjacencias(new ArrayList<Integer>());
+		mock9.getAdjacencias().add(13);
+		listaAdjacencia.add(mock9);
+		
+		Adjacencia mock10 = new Adjacencia();
+		mock10.setValor(13);
+		mock10.setAdjacencias(new ArrayList<Integer>());
+		mock10.getAdjacencias().add(15);
+		listaAdjacencia.add(mock10);
+		
+		Adjacencia mock11 = new Adjacencia();
+		mock11.setValor(15);
+		mock11.setAdjacencias(new ArrayList<Integer>());
+		mock11.getAdjacencias().add(14);
+		listaAdjacencia.add(mock11);
+		
+		Adjacencia mock12 = new Adjacencia();
+		mock12.setValor(14);
+		mock12.setAdjacencias(new ArrayList<Integer>());
+		listaAdjacencia.add(mock12);
 		
 		for(Adjacencia ad : listaAdjacencia) {
 			System.out.print(ad.getValor()+": ");
@@ -406,14 +621,14 @@ public class Main {
 		}
 		System.out.println();
 		
-		Random rand = new Random();
-		int corte1 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
-		int corte2 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
-		while(corte1 == corte2) {
-			corte2 = 1 + rand.nextInt(listaAdjacencia.size() - 1);
-		}
+		corte1 = 4;
+		corte2 = 5;
+		
 		System.out.println(corte1);
-		System.out.println(corte2);
+		System.out.println(corte2);*/
+		
+		arvore = adjacenteParaArvore(listaAdjacencia);
+		
 		int valorCorte2 = listaAdjacencia.get(corte2).getValor();
 		
 		if(listaAdjacencia.get(corte1).getAdjacencias().isEmpty()) {
@@ -444,50 +659,38 @@ public class Main {
 			listaAdjacencia.remove(remover);
 			floresta.add(adjacenteParaArvore(listaAdjacencia));
 		} else {
-			List<Integer> deletar = new ArrayList<>();
 			for(Integer aux : listaAdjacencia.get(corte1).getAdjacencias()) {
-				Arvore subArvore = new Arvore(aux);
-				floresta.add(subArvore);
+				No noAux = arvore.buscar(aux);
+				List<No> listNoAux = new ArrayList<No>();
+				for(No noAuxFilho : noAux.getFilhos()) {
+					listNoAux.add(noAuxFilho);
+				}
+				Arvore arvoreAux = new Arvore(aux);
+				arvoreAux.getRaiz().setFilhos(listNoAux);
+				floresta.add(arvoreAux);
 			}
-			int remover = -1;
-			List<Integer> excluirFilhos = new ArrayList<>();
-			for(int i = 0; i < listaAdjacencia.size(); i++) {
-				if(listaAdjacencia.get(i).getValor() == listaAdjacencia.get(corte1).getValor()) {
-					remover = i;
+			for(int i = 0; i < destinos.length; i++) {
+				if(destinos[i] == listaAdjacencia.get(corte1).getValor()) {
+					Arvore subArvore = new Arvore(destinos[i]);
+					floresta.add(subArvore);
+					break;
 				}
-				for(int j = 0; j < listaAdjacencia.get(i).getAdjacencias().size(); j++) {
-					if(listaAdjacencia.get(i).getAdjacencias().get(j) == listaAdjacencia.get(corte1).getValor()) {
-						for(int k = 0; k < listaAdjacencia.get(i).getAdjacencias().size(); k++) {
-							deletar.add(listaAdjacencia.get(i).getAdjacencias().get(k));
-						}
-						excluirFilhos.add(j);
-					}
-				}
-				for(int j = excluirFilhos.size(); j > 0; j--) {
-					int aux = excluirFilhos.get(j-1);
-					listaAdjacencia.get(i).getAdjacencias().remove(aux);
-				}
-				excluirFilhos = new ArrayList<>();
 			}
-			listaAdjacencia.remove(remover);
-			while(!deletar.isEmpty()) {
-				remover = -1;
-				for(int i = 0; i < listaAdjacencia.size(); i++) {
-					if(listaAdjacencia.get(i).getValor() == deletar.get(0)) {
-						remover = i;
-						if(!listaAdjacencia.get(i).getAdjacencias().isEmpty()) {
-							for(int j = 0; j < listaAdjacencia.get(i).getAdjacencias().size(); j++) {
-								if(!deletar.contains(listaAdjacencia.get(i).getAdjacencias().get(j))) {
-									deletar.add(listaAdjacencia.get(i).getAdjacencias().get(j));
-								}
+			Arvore arvoreCortada = adjacenteParaArvore(listaAdjacencia);
+			for(Adjacencia ad : listaAdjacencia) {
+				for(Integer aux : ad.getAdjacencias()) {
+					if(aux == listaAdjacencia.get(corte1).getValor()) {
+						No no = arvoreCortada.buscar(ad.getValor());
+						for(No noAux : no.getFilhos()) {
+							if(noAux.getValor() == listaAdjacencia.get(corte1).getValor()) {
+								no.getFilhos().remove(noAux);
+								break;
 							}
 						}
-						listaAdjacencia.remove(remover);
 					}
 				}
-				deletar.remove(0);
 			}
-			floresta.add(adjacenteParaArvore(listaAdjacencia));
+			floresta.add(arvoreCortada);
 		}
 		
 		for(Arvore ar : floresta) {
@@ -497,6 +700,7 @@ public class Main {
 				for(int i = 0; i < adjacencia.size(); i++) {
 					if(adjacencia.get(i).getValor() == valorCorte2) {
 						posicaoCorte = i;
+						break;
 					}
 				}
 				if(adjacencia.get(posicaoCorte).getAdjacencias().isEmpty()) {
@@ -507,74 +711,67 @@ public class Main {
 							break;
 						}
 					}
-					int remover = -1;
-					List<Integer> excluirFilhos = new ArrayList<>();
-					for(int i = 0; i < adjacencia.size(); i++) {
-						if(adjacencia.get(i).getValor() == adjacencia.get(posicaoCorte).getValor()) {
-							remover = i;
-						}
-						for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
-							if(adjacencia.get(i).getAdjacencias().get(j) == adjacencia.get(posicaoCorte).getValor()) {
-								excluirFilhos.add(j);
-							}
-						}
-						for(int j = excluirFilhos.size(); j > 0; j--) {
-							int aux = excluirFilhos.get(j-1);
-							adjacencia.get(i).getAdjacencias().remove(aux);
-						}
-						excluirFilhos = new ArrayList<>();
-					}
-					adjacencia.remove(remover);
-					floresta.add(adjacenteParaArvore(adjacencia));
-				} else {
-					List<Integer> deletar = new ArrayList<>();
-					for(Integer aux : adjacencia.get(posicaoCorte).getAdjacencias()) {
-						Arvore subArvore = new Arvore(aux);
-						floresta.add(subArvore);
-					}
-					int remover = -1;
-					List<Integer> excluirFilhos = new ArrayList<>();
-					for(int i = 0; i < adjacencia.size(); i++) {
-						if(adjacencia.get(i).getValor() == adjacencia.get(posicaoCorte).getValor()) {
-							remover = i;
-						}
-						for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
-							if(adjacencia.get(i).getAdjacencias().get(j) == adjacencia.get(posicaoCorte).getValor()) {
-								for(int k = 0; k < adjacencia.get(i).getAdjacencias().size(); k++) {
-									deletar.add(adjacencia.get(i).getAdjacencias().get(k));
-								}
-								excluirFilhos.add(j);
-							}
-						}
-						for(int j = adjacencia.get(i).getAdjacencias().size(); j > 0; j--) {
-							int aux = excluirFilhos.get(j-1);
-							adjacencia.get(i).getAdjacencias().remove(aux);
-						}
-					}
-					adjacencia.remove(remover);
-					while(!deletar.isEmpty()) {
-						remover = -1;
+					if(!ar.getRaiz().getFilhos().isEmpty()) {
+						int remover = -1;
+						List<Integer> excluirFilhos = new ArrayList<>();
 						for(int i = 0; i < adjacencia.size(); i++) {
-							if(adjacencia.get(i).getValor() == deletar.get(0)) {
+							if(adjacencia.get(i).getValor() == adjacencia.get(posicaoCorte).getValor()) {
 								remover = i;
-								if(!adjacencia.get(i).getAdjacencias().isEmpty()) {
-									for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
-										if(!deletar.contains(adjacencia.get(i).getAdjacencias().get(j))) {
-											deletar.add(adjacencia.get(i).getAdjacencias().get(j));
+							}
+							for(int j = 0; j < adjacencia.get(i).getAdjacencias().size(); j++) {
+								if(adjacencia.get(i).getAdjacencias().get(j) == adjacencia.get(posicaoCorte).getValor()) {
+									excluirFilhos.add(j);
+								}
+							}
+							for(int j = excluirFilhos.size(); j > 0; j--) {
+								int aux = excluirFilhos.get(j-1);
+								adjacencia.get(i).getAdjacencias().remove(aux);
+							}
+							excluirFilhos = new ArrayList<Integer>();
+						}
+						adjacencia.remove(remover);
+						floresta.add(adjacenteParaArvore(adjacencia));
+					}
+				} else {
+					for(Integer aux : adjacencia.get(posicaoCorte).getAdjacencias()) {
+						No noAux = arvore.buscar(aux);
+						List<No> listNoAux = new ArrayList<No>();
+						for(No noAuxFilho : noAux.getFilhos()) {
+							listNoAux.add(noAuxFilho);
+						}
+						Arvore arvoreAux = new Arvore(aux);
+						arvoreAux.getRaiz().setFilhos(listNoAux);
+						floresta.add(arvoreAux);
+					}
+					for(int i = 0; i < destinos.length; i++) {
+						if(destinos[i] == adjacencia.get(posicaoCorte).getValor()) {
+							Arvore subArvore = new Arvore(destinos[i]);
+							floresta.add(subArvore);
+							break;
+						}
+					}
+					if(valorCorte2 != ar.getRaiz().getValor()) {
+						Arvore arvoreCortada = adjacenteParaArvore(adjacencia);
+						for(Adjacencia ad : adjacencia) {
+							for(Integer aux : ad.getAdjacencias()) {
+								if(aux == adjacencia.get(posicaoCorte).getValor()) {
+									No no = arvoreCortada.buscar(ad.getValor());
+									for(No noAux : no.getFilhos()) {
+										if(noAux.getValor() == adjacencia.get(posicaoCorte).getValor()) {
+											no.getFilhos().remove(noAux);
+											break;
 										}
 									}
 								}
-								adjacencia.remove(remover);
-								deletar.get(0);
 							}
 						}
+						floresta.add(arvoreCortada);
 					}
-					floresta.add(adjacenteParaArvore(listaAdjacencia));
 				}
+				floresta.remove(ar);
 				break;
 			}
 		}
-		
 		return floresta;
 	}
 	
@@ -878,7 +1075,7 @@ public class Main {
 			}
 		}
 		verificaRaizOrigem(listaAdjacencia, origem);
-		System.out.println("Adjacencia merge: ");
+		/*System.out.println("Adjacencia merge: ");
 		for(Adjacencia ad : listaAdjacencia) {
 			System.out.print(ad.getValor()+": ");
 			for(Integer aux : ad.getAdjacencias()) {
@@ -886,7 +1083,7 @@ public class Main {
 			}
 			System.out.println();
 		}
-		System.out.println();
+		System.out.println();*/
 		return listaAdjacencia;
 	}
 	
