@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -14,37 +15,76 @@ public class Main {
 	public static void main(String[] args) throws IOException {
 		
 		int origem = 1;
-		int[] destinos = {2, 9, 10, 13, 14};
+		
+		// Rede 0
+		//int[] destinos = {2, 9, 10, 13, 14};
+		//int delayMax = 25;
+		//List<Enlace> roteadores = lerArquivoRoteamento("Roteamento.txt");
+		
+		// Rede 1
+		//List<Enlace> roteadores = lerArquivoRoteamento("Rede1.txt");
+		//int[] destinos = {7, 11, 14, 16, 18};
+		//int delayMax = 9;
+		
+		//Rede Mista
+		List<Enlace> roteadores = lerArquivoRoteamento("RedeMista.txt");
+		int[] destinos = {2, 9, 10, 13, 14, 22, 26, 29, 31, 33};
 		int delayMax = 25;
+		
 		
 		int quantidadePopulacao = 50;
 		int numeroGeracoes = 50;
 		int numeroFilhos = 20;
-		int taxaMutacao = 10;
+		int taxaMutacao = 2;
 		
-		List<Enlace> roteadores = lerArquivoRoteamento("Roteamento.txt");
+		//String metodo = "spea2";
+		//String metodo = "nsga2";
+		String metodo = "agSimples";
+		
 		
 		List<Arvore> populacao = geraPopulacaoInicial(origem, destinos, roteadores, quantidadePopulacao);
-		for(Arvore arvore : populacao) {
-			avaliaIndividuo(arvore, destinos, delayMax);
+		if("agSimples".equals(metodo)) {
+			for(Arvore arvore : populacao) {
+				avaliaIndividuo(arvore, destinos, delayMax);
+			}
 		}
 		
-		ag(populacao, numeroGeracoes, numeroFilhos, destinos, roteadores, delayMax, origem, taxaMutacao);
-		Collections.sort(populacao);
+		boolean[] funcoes = {true, false, false, true};
 		
-		List<Adjacencia> melhor = montarListaAdjacencias(populacao.get(0).getRaiz(), new ArrayList<>(), new ArrayList<>());
+		long start = System.currentTimeMillis();
 		
-		System.out.println("Melhor Individuo: ");
-		for(Adjacencia ad : melhor) {
-			System.out.print(ad.getValor()+": ");
-			for(Integer aux : ad.getAdjacencias()) {
-				System.out.print(aux+", ");
+		populacao = ag(populacao, numeroGeracoes, numeroFilhos, destinos, roteadores, delayMax, origem, taxaMutacao, funcoes, metodo, quantidadePopulacao);
+		
+		long elapsed = System.currentTimeMillis() - start;
+		
+		if("agSimples".equals(metodo)) {
+			
+			Collections.sort(populacao);
+			
+			List<Adjacencia> melhor = montarListaAdjacencias(populacao.get(0).getRaiz(), new ArrayList<>(), new ArrayList<>());
+			
+			System.out.println("Melhor Individuo: ");
+			for(Adjacencia ad : melhor) {
+				System.out.print(ad.getValor()+": ");
+				for(Integer aux : ad.getAdjacencias()) {
+					System.out.print(aux+", ");
+				}
+				System.out.println();
 			}
 			System.out.println();
+			System.out.println("Custo: " + calculaCusto(populacao.get(0)));
+			System.out.println("Delay: " + delay(populacao.get(0), destinos));
+			System.out.println("Tempo: " + elapsed/1000.0);
+		} else {
+			System.out.println("Ótimo Pareto:");
+			mostraOtimoPareto(populacao, metodo);
+			
+			System.out.println("\nError Rate: " + errorRate(populacao, metodo));
+			System.out.println("Pareto Subset: " + paretoSubset(populacao, metodo));
+			
 		}
-		System.out.println();
-		System.out.println("Custo: " + calculaCusto(populacao.get(0)));
-		System.out.println("Delay: " + delay(populacao.get(0), destinos));
+		
+		
 		System.out.println("FIM");
 	}
 	
@@ -123,18 +163,44 @@ public class Main {
 		return populacao;
 	}
 	
-	public static void ag(List<Arvore> populacao, int numeroGeracoes, int numeroFilhos, int[] destinos, List<Enlace> enlaces, int delayMax, int origem, int taxaMutacao) {
+	public static List<Arvore> ag(List<Arvore> populacao, int numeroGeracoes, int numeroFilhos, int[] destinos, List<Enlace> enlaces, int delayMax, int origem, int taxaMutacao, boolean funcoes[], String metodo, int quantidadePopulacao) {
 		Grafo grafo = montarGrafo(enlaces);
 		for(int i = 0; i < numeroGeracoes; i++) {
+			System.out.println(i);
 			List<Arvore> filhos = new ArrayList<Arvore>();
 			
+			if("nsga2".equals(metodo)) {
+				nsga2(populacao, destinos, funcoes);
+			}
+			if("spea2".equals(metodo)) {
+				spea2(populacao, funcoes, destinos);
+			}
+			
 			for(int j = 0; j < numeroFilhos; j++) {
-				double maxRoleta = montarRoleta(populacao);
-				int pai1 = roleta(populacao, maxRoleta);
-				int pai2 = roleta(populacao, maxRoleta);
-				
-				while(pai1 == pai2) {
+				int pai1 = -1;
+				int pai2 = -1;
+				if("agSimples".equals(metodo)) {
+					double maxRoleta = montarRoleta(populacao);
+					pai1 = roleta(populacao, maxRoleta);
 					pai2 = roleta(populacao, maxRoleta);
+					
+					while(pai1 == pai2) {
+						pai2 = roleta(populacao, maxRoleta);
+					}
+				} else if("nsga2".equals(metodo)) {
+					pai1 = torneio2nsga2(populacao);
+					pai2 = torneio2nsga2(populacao);
+					
+					while(pai1 == pai2) {
+						pai2 = torneio2nsga2(populacao);
+					}
+				} else if("spea2".equals(metodo)) {
+					pai1 = torneio3(populacao);
+					pai2 = torneio3(populacao);
+					
+					while(pai1 == pai2) {
+						pai2 = torneio3(populacao);
+					}
 				}
 				
 				Arvore arvore = new Arvore(0);
@@ -151,17 +217,43 @@ public class Main {
 					filhos.add(arvore);
 				}
 			}
-			for(Arvore ar : filhos) {
-				avaliaIndividuo(ar, destinos, delayMax);
-			}
-			Collections.sort(populacao);
-			for(int j = populacao.size(); j > populacao.size()/2; j--) {
-				populacao.remove(j-1);
+			if("agSimples".equals(metodo)) {
+				for(Arvore ar : filhos) {
+					avaliaIndividuo(ar, destinos, delayMax);
+				}
+				Collections.sort(populacao);
+				for(int j = populacao.size(); j > populacao.size()/2; j--) {
+					populacao.remove(j-1);
+				}
 			}
 			for(int j = 0; j < filhos.size(); j++) {
 				populacao.add(filhos.get(j));
 			}
+			if("nsga2".equals(metodo)) {
+				nsga2(populacao, destinos, funcoes);
+				
+				Collections.sort(populacao, new Comparator<Arvore>(){
+			        public int compare(Arvore first, Arvore second){
+			        	if (first.getFronteira() < second.getFronteira()) { 
+			      		  return -1; 
+			      		  } if (first.getFronteira() > second.getFronteira()) { 
+			      		  return 1; 
+			      		  } 
+			      		  return 0; 
+			      		 }
+			        });
+				populacao = reinsercaoNsga2(populacao, quantidadePopulacao);
+			}
+			if("spea2".equals(metodo)) {
+				spea2(populacao, funcoes, destinos);
+				
+				Collections.sort(populacao);
+				for(int j = populacao.size(); j > quantidadePopulacao; j--) {
+					populacao.remove(j-1);
+				}
+			}
 		}
+		return populacao;
 	}
 	
 	public static List<Enlace> procuraVizinhos(List<Enlace> roteadores, int valor, List<Integer> nosArvores) {
@@ -293,7 +385,7 @@ public class Main {
 	
 	public static Arvore crossover(Arvore pai1, Arvore pai2, int[] destinos, List<Enlace> enlaces, int delayMax, int origem) {
 		//Quebra da arvore verificando as rotas dos pais que são iguais, sem deixar nenhum ponto destino de fora
-		List<Arvore> floresta = quebrarArvoreCrossover(pai1, pai2, destinos);
+		List<Arvore> floresta = quebrarArvoreCrossover(pai1, pai2, destinos, origem);
 		Dijkstra dijkstra = new Dijkstra();
 		Random rand = new Random();
 		
@@ -417,7 +509,7 @@ public class Main {
 					floresta.remove(arvore1);
 					floresta.remove(arvore2);
 				}
-				floresta.add(adjacenteParaArvore(fusao));
+				floresta.add(adjacenteParaArvore(fusao, origem));
 			} else {
 				if(arvore1 < arvore2) {
 					floresta.remove(arvore2);
@@ -426,7 +518,7 @@ public class Main {
 					floresta.remove(arvore1);
 					floresta.remove(arvore2);
 				}
-				floresta.add(adjacenteParaArvore(adjacencia1));
+				floresta.add(adjacenteParaArvore(adjacencia1, origem));
 			}
 		}
 		floresta.get(0).getRaiz().limpaArvore(destinos);
@@ -434,7 +526,7 @@ public class Main {
 	}
 	
 	public static Arvore mutacao(Arvore filho, int[] destinos, List<Enlace> enlaces, int delayMax, int origem) {
-		List<Arvore> floresta = quebraArvoreMutacao(filho, destinos);
+		List<Arvore> floresta = quebraArvoreMutacao(filho, destinos, origem);
 		Dijkstra dijkstra = new Dijkstra();
 		Random rand = new Random();
 		
@@ -513,7 +605,7 @@ public class Main {
 					floresta.remove(arvore1);
 					floresta.remove(arvore2);
 				}
-				floresta.add(adjacenteParaArvore(fusao));
+				floresta.add(adjacenteParaArvore(fusao, origem));
 			} else {
 				if(arvore1 < arvore2) {
 					floresta.remove(arvore2);
@@ -522,14 +614,14 @@ public class Main {
 					floresta.remove(arvore1);
 					floresta.remove(arvore2);
 				}
-				floresta.add(adjacenteParaArvore(adjacencia1));
+				floresta.add(adjacenteParaArvore(adjacencia1, origem));
 			}
 		}
 		floresta.get(0).getRaiz().limpaArvore(destinos);
 		return floresta.get(0);
 	}
 	
-	public static List<Arvore> quebraArvoreMutacao(Arvore arvore, int[] destinos) {
+	public static List<Arvore> quebraArvoreMutacao(Arvore arvore, int[] destinos, int origem) {
 		List<Arvore> floresta = new ArrayList<>();
 		List<Adjacencia> listaAdjacencia = montarListaAdjacencias(arvore.getRaiz(), new ArrayList<Adjacencia>(), new ArrayList<Integer>());
 		
@@ -627,7 +719,7 @@ public class Main {
 		System.out.println(corte1);
 		System.out.println(corte2);*/
 		
-		arvore = adjacenteParaArvore(listaAdjacencia);
+		arvore = adjacenteParaArvore(listaAdjacencia, origem);
 		
 		int valorCorte2 = listaAdjacencia.get(corte2).getValor();
 		
@@ -657,7 +749,7 @@ public class Main {
 				excluirFilhos = new ArrayList<Integer>();
 			}
 			listaAdjacencia.remove(remover);
-			floresta.add(adjacenteParaArvore(listaAdjacencia));
+			floresta.add(adjacenteParaArvore(listaAdjacencia, origem));
 		} else {
 			for(Integer aux : listaAdjacencia.get(corte1).getAdjacencias()) {
 				No noAux = arvore.buscar(aux);
@@ -676,7 +768,7 @@ public class Main {
 					break;
 				}
 			}
-			Arvore arvoreCortada = adjacenteParaArvore(listaAdjacencia);
+			Arvore arvoreCortada = adjacenteParaArvore(listaAdjacencia, origem);
 			for(Adjacencia ad : listaAdjacencia) {
 				for(Integer aux : ad.getAdjacencias()) {
 					if(aux == listaAdjacencia.get(corte1).getValor()) {
@@ -730,7 +822,7 @@ public class Main {
 							excluirFilhos = new ArrayList<Integer>();
 						}
 						adjacencia.remove(remover);
-						floresta.add(adjacenteParaArvore(adjacencia));
+						floresta.add(adjacenteParaArvore(adjacencia, origem));
 					}
 				} else {
 					for(Integer aux : adjacencia.get(posicaoCorte).getAdjacencias()) {
@@ -751,7 +843,7 @@ public class Main {
 						}
 					}
 					if(valorCorte2 != ar.getRaiz().getValor()) {
-						Arvore arvoreCortada = adjacenteParaArvore(adjacencia);
+						Arvore arvoreCortada = adjacenteParaArvore(adjacencia, origem);
 						for(Adjacencia ad : adjacencia) {
 							for(Integer aux : ad.getAdjacencias()) {
 								if(aux == adjacencia.get(posicaoCorte).getValor()) {
@@ -1162,7 +1254,7 @@ public class Main {
 		}
 	}
 	
-	public static List<Arvore> quebrarArvoreCrossover(Arvore pai1, Arvore pai2, int[] destinos) {
+	public static List<Arvore> quebrarArvoreCrossover(Arvore pai1, Arvore pai2, int[] destinos, int origem) {
 		List<Arvore> floresta = new ArrayList<>();
 		List<Adjacencia> adjacenciaPai1 = montarListaAdjacencias(pai1.getRaiz(), new ArrayList<>(), new ArrayList<>());
 		List<Adjacencia> adjacenciaPai2 = montarListaAdjacencias(pai2.getRaiz(), new ArrayList<>(), new ArrayList<>());
@@ -1223,7 +1315,7 @@ public class Main {
 						naoVerificados.remove(0);
 					}
 					if(!listaAdjacencia.isEmpty()) {
-						floresta.add(adjacenteParaArvore(listaAdjacencia));
+						floresta.add(adjacenteParaArvore(listaAdjacencia, origem));
 					}
 				}
 			}
@@ -1243,8 +1335,16 @@ public class Main {
 		return floresta;
 	}
 	
-	public static Arvore adjacenteParaArvore(List<Adjacencia> adjacentes) {
+	public static Arvore adjacenteParaArvore(List<Adjacencia> adjacentes, int origem) {
 		Arvore arvore = new Arvore(adjacentes.get(0).getValor());
+		if(verificaValorLista(adjacentes, origem) && adjacentes.get(0).getValor() != origem) {
+			for(int i = 0; i < adjacentes.size(); i++) {
+				if(adjacentes.get(i).getValor() == origem) {
+					arvore = new Arvore(adjacentes.get(i).getValor());
+					break;
+				}
+			}
+		}
 		List<Integer> faltaAdicionar = new ArrayList<Integer>();
 		for(Adjacencia ad : adjacentes) {
 			faltaAdicionar.add(ad.getValor());
@@ -1252,9 +1352,20 @@ public class Main {
 		while(!faltaAdicionar.isEmpty()) {
 			No no = arvore.buscar(faltaAdicionar.get(0));
 			if(no == null) {
-				int aux = faltaAdicionar.get(0);
-				faltaAdicionar.remove(0);
-				faltaAdicionar.add(aux);
+				if(faltaAdicionar.size() == 1) {
+					for(Adjacencia ad : adjacentes) {
+						if(ad.getValor() == faltaAdicionar.get(0)) {
+							no = arvore.buscar(ad.getAdjacencias().get(0));
+							no.adicionaFilho(ad.getValor(), -1, -1);
+							faltaAdicionar.remove(0);
+							break;
+						}
+					}
+				} else {
+					int aux = faltaAdicionar.get(0);
+					faltaAdicionar.remove(0);
+					faltaAdicionar.add(aux);
+				}
 			} else {
 				for(Adjacencia ad : adjacentes) {
 					if(ad.getValor() == faltaAdicionar.get(0)) {
@@ -1297,5 +1408,599 @@ public class Main {
 		adjacencia.setAdjacencias(adjacente);
 		return adjacencia;
 	}
+	
+	public static void nsga2(List<Arvore> populacao, int[] destinos, boolean[] funcoes) {
+		for(Arvore a : populacao) {
+			a.setCusto(calculaCusto(a));
+			a.setDelay(delay(a, destinos));
+		}
+		int quantidadeDeObjetivos = 0;
+		for(boolean funcao : funcoes) {
+			if(funcao) {
+				quantidadeDeObjetivos++;
+			}
+		}
+		//Função 1 sempre esta presente
+		for(Arvore arvore : populacao) {
+			arvore.setFuncao1(funcao1(arvore.getCusto()));
+		}
+		
+		for(Arvore arvore : populacao) {
+			if(quantidadeDeObjetivos == 2) {
+				for(int i = 1; i < funcoes.length; i++) {
+					if(funcoes[i] && i == 1) {
+						arvore.setFuncao2(funcao2(arvore.getDelay()));
+						break;
+					} else if(funcoes[i] && i == 2) {
+						arvore.setFuncao2(funcao3(arvore, destinos));
+						break;
+					} else if(funcoes[i] && i == 3) {
+						arvore.setFuncao2(funcao4(arvore, destinos));
+						break;
+					}
+				}
+			} else if(quantidadeDeObjetivos == 3) {
+				boolean funcao3 = false;
+				for(int i = 1; i < funcoes.length; i++) {
+					if(funcoes[i] && i == 1) {
+						arvore.setFuncao2(funcao2(arvore.getDelay()));
+						funcao3 = true;
+					}
+					if(!funcao3 && funcoes[i] && i == 2) {
+						arvore.setFuncao2(funcao3(arvore, destinos));
+						funcao3 = true;
+					}
+					if(funcao3 && funcoes[i] && i == 2) {
+						arvore.setFuncao3(funcao3(arvore, destinos));
+						break;
+					}
+					if(funcoes[i] && i == 3) {
+						arvore.setFuncao3(funcao4(arvore, destinos));
+						break;
+					}
+				}
+			} else {
+				System.out.println("Deu ruim");
+			}
+		}
+		//Separa a população em fronteiras
+		List<Fronteira> fronteiras = encontraFronteiras(populacao, quantidadeDeObjetivos, funcoes);
+		
+		//mostraFronteiras(fronteiras);
+		
+		for(Fronteira fronteira : fronteiras) {
+			Arvore melhorFuncao1 = null;
+			Arvore melhorFuncao2 = null;
+			Arvore melhorFuncao3 = null;
+			for(Arvore arvore : fronteira.getIndividuos()) {
+				if(melhorFuncao1 == null || arvore.getFuncao1() > melhorFuncao1.getFuncao1()) {
+					melhorFuncao1 = arvore;
+				}
+				if(melhorFuncao2 == null || (funcoes[1] && arvore.getFuncao2() > melhorFuncao2.getFuncao2()) || (!funcoes[1] && arvore.getFuncao2() < melhorFuncao2.getFuncao2())) {
+					melhorFuncao2 = arvore;
+				}
+				if(quantidadeDeObjetivos == 3 && (melhorFuncao3 == null || arvore.getFuncao3() < melhorFuncao3.getFuncao3())) {
+					melhorFuncao3 = arvore;
+				}
+			}
+			melhorFuncao1.setCrowdingDistance(10000.0);
+			melhorFuncao2.setCrowdingDistance(10000.0);
+			if(quantidadeDeObjetivos == 3) {
+				melhorFuncao3.setCrowdingDistance(10000.0);
+			}
+			
+			Collections.sort(fronteira.getIndividuos(), new Comparator<Arvore>(){
+		        public int compare(Arvore first, Arvore second){
+		        	if (first.getFuncao1() < second.getFuncao1()) { 
+		      		  return -1; 
+		      		  } if (first.getFuncao1() > second.getFuncao1()) { 
+		      		  return 1; 
+		      		  } 
+		      		  return 0; 
+		      		 }
+		        });
 
+			for(int i = 0; i < fronteira.getIndividuos().size(); i++) {
+				if(fronteira.getIndividuos().get(i).getCrowdingDistance() == 0.0) {
+					if(i == 0) {
+						fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i+1).getFuncao1());
+					} else if(i == fronteira.getIndividuos().size() - 1) {
+						fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i-1).getFuncao1());
+					} else {
+						fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i+1).getFuncao1() - fronteira.getIndividuos().get(i-1).getFuncao1());
+					}
+				}
+			}
+			
+			Collections.sort(fronteira.getIndividuos(), new Comparator<Arvore>(){
+		        public int compare(Arvore first, Arvore second){
+		        	if (first.getFuncao2() < second.getFuncao2()) { 
+		      		  return -1; 
+		      		  } if (first.getFuncao2() > second.getFuncao2()) { 
+		      		  return 1; 
+		      		  } 
+		      		  return 0; 
+		      		 }
+		        });
+			
+			for(int i = 0; i < fronteira.getIndividuos().size(); i++) {
+				if(fronteira.getIndividuos().get(i).getCrowdingDistance() == 0.0) {
+					if(i == 0) {
+						fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i).getCrowdingDistance() + fronteira.getIndividuos().get(i+1).getFuncao2());
+					} else if(i == fronteira.getIndividuos().size() - 1) {
+						fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i).getCrowdingDistance() + fronteira.getIndividuos().get(i-1).getFuncao2());
+					} else {
+						fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i).getCrowdingDistance() + fronteira.getIndividuos().get(i+1).getFuncao2() - fronteira.getIndividuos().get(i-1).getFuncao2());
+					}
+				}
+			}
+			
+			if(quantidadeDeObjetivos == 3) {
+				Collections.sort(fronteira.getIndividuos(), new Comparator<Arvore>(){
+			        public int compare(Arvore first, Arvore second){
+			        	if (first.getFuncao3() < second.getFuncao3()) { 
+			      		  return -1; 
+			      		  } if (first.getFuncao3() > second.getFuncao3()) { 
+			      		  return 1; 
+			      		  } 
+			      		  return 0; 
+			      		 }
+			        });
+				
+				for(int i = 0; i < fronteira.getIndividuos().size(); i++) {
+					if(fronteira.getIndividuos().get(i).getCrowdingDistance() == 0.0) {
+						if(i == 0) {
+							fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i).getCrowdingDistance() + fronteira.getIndividuos().get(i+1).getFuncao3());
+						} else if(i == fronteira.getIndividuos().size() - 1) {
+							fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i).getCrowdingDistance() + fronteira.getIndividuos().get(i-1).getFuncao3());
+						} else {
+							fronteira.getIndividuos().get(i).setCrowdingDistance(fronteira.getIndividuos().get(i).getCrowdingDistance() + fronteira.getIndividuos().get(i+1).getFuncao3() - fronteira.getIndividuos().get(i-1).getFuncao3());
+						}
+					}
+				}
+			}
+		}
+		for(int i = 0; i < fronteiras.size(); i++) {
+			for(Arvore arvore : fronteiras.get(i).getIndividuos()) {
+				arvore.setFronteira(i+1);
+			}
+		}
+	}
+	
+	public static double funcao1(int custo) {
+		return 1.0/custo;
+	}
+	
+	public static double funcao2(int delay) {
+		return 1.0/delay;
+	}
+	
+	public static double funcao3(Arvore arvore, int[] destinos) {
+		int soma = 0;
+		for(int i = 0; i < destinos.length; i++) {
+			soma = arvore.getRaiz().calculaDelay(destinos[i]);
+		}
+		return  ((double) soma)/ ((double) destinos.length);
+	}
+	
+	public static double funcao4(Arvore arvore, int[] destinos) {
+		int maior = 0;
+		for(int i = 0; i < destinos.length; i++) {
+			int aux = arvore.getRaiz().calculaDelay(destinos[i]);
+			if(aux > maior) {
+				maior = aux;
+			}
+		}
+		return (double) maior;
+	}
+	
+	public static List<Fronteira> encontraFronteiras(List<Arvore> populacao, int quantidadeObjetivos, boolean[] funcoes) {
+		List<Fronteira> fronteiras = new ArrayList<>();
+		List<Arvore> individuosSemFronteira = new ArrayList<>();
+		List<Integer> remover = new ArrayList<>();
+		
+		int fronteira = 0;
+		
+		for(Arvore arvore : populacao) {
+			individuosSemFronteira.add(arvore);
+		}
+		
+		while(!individuosSemFronteira.isEmpty()) {
+			fronteira++;
+			for(int i = 0; i < individuosSemFronteira.size(); i++) {
+				if(quantidadeObjetivos == 2) {
+					boolean dominado = false;
+					for(Arvore arvore : individuosSemFronteira) {
+						if((individuosSemFronteira.get(i).getFuncao1() <= arvore.getFuncao1() && (funcoes[1] && individuosSemFronteira.get(i).getFuncao2() < arvore.getFuncao2() || !funcoes[1] && individuosSemFronteira.get(i).getFuncao2() > arvore.getFuncao2()))
+								|| (individuosSemFronteira.get(i).getFuncao1() < arvore.getFuncao1() && (funcoes[1] && individuosSemFronteira.get(i).getFuncao2() <= arvore.getFuncao2() || !funcoes[1] && individuosSemFronteira.get(i).getFuncao2() >= arvore.getFuncao2()))) {
+							dominado = true;
+							break;
+						}
+					}
+					if(!dominado) {
+						remover.add(i);
+					}
+				} else if(quantidadeObjetivos == 3) {
+					boolean dominado = false;
+					for(Arvore arvore : individuosSemFronteira) {
+						if((individuosSemFronteira.get(i).getFuncao1() <= arvore.getFuncao1() && (funcoes[1] && individuosSemFronteira.get(i).getFuncao2() <= arvore.getFuncao2() || !funcoes[1] && individuosSemFronteira.get(i).getFuncao2() >= arvore.getFuncao2()) && individuosSemFronteira.get(i).getFuncao3() > arvore.getFuncao3())
+								|| (individuosSemFronteira.get(i).getFuncao1() < arvore.getFuncao1() && (funcoes[1] && individuosSemFronteira.get(i).getFuncao2() <= arvore.getFuncao2() || !funcoes[1] && individuosSemFronteira.get(i).getFuncao2() >= arvore.getFuncao2()) && individuosSemFronteira.get(i).getFuncao3() >= arvore.getFuncao3()) ||
+								(individuosSemFronteira.get(i).getFuncao1() <= arvore.getFuncao1() && (funcoes[1] && individuosSemFronteira.get(i).getFuncao2() < arvore.getFuncao2() || !funcoes[1] && individuosSemFronteira.get(i).getFuncao2() > arvore.getFuncao2()) && individuosSemFronteira.get(i).getFuncao3() >= arvore.getFuncao3())) {
+							dominado = true;
+							break;
+						}
+					}
+					if(!dominado) {
+						remover.add(i);
+					}
+				}
+			}
+			Fronteira auxFronteira = new Fronteira(fronteira);
+			for(Integer remove : remover) {
+				auxFronteira.getIndividuos().add(individuosSemFronteira.get(remove));
+			}
+			fronteiras.add(auxFronteira);
+			for(int i = remover.size(); i > 0; i--) {
+				int aux = remover.get(i-1);
+				individuosSemFronteira.remove(aux);
+			}
+			remover = new ArrayList<Integer>();
+		}
+		
+		return fronteiras;
+	}
+	
+	public static void mostraFronteiras(List<Fronteira> fronteiras) {
+		for(Fronteira fronteira : fronteiras) {
+			System.out.println("Fronteira "+ fronteira.getFronteira() +" :");
+			for(Arvore arvore : fronteira.getIndividuos()) {
+				System.out.println("F1: "+arvore.getFuncao1()+"\t F2: "+arvore.getFuncao2()+"\t F3: "+ arvore.getFuncao3());
+			}
+		}
+	}
+	
+	public static int torneio2nsga2(List<Arvore> populacao) {
+		Random rand = new Random();
+		
+		int sorteio1 = rand.nextInt(populacao.size());
+		int sorteio2 = rand.nextInt(populacao.size());
+		
+		while(sorteio1 == sorteio2) {
+			sorteio2 = rand.nextInt(populacao.size());
+		}
+		
+		if(populacao.get(sorteio1).getFronteira() < populacao.get(sorteio2).getFronteira()) {
+			return sorteio1;
+		} else if(populacao.get(sorteio1).getFronteira() > populacao.get(sorteio2).getFronteira()) {
+			return sorteio2;
+		} else if(populacao.get(sorteio1).getFronteira() == populacao.get(sorteio2).getFronteira()) {
+			if(populacao.get(sorteio1).getCrowdingDistance() < populacao.get(sorteio2).getCrowdingDistance()) {
+				return sorteio1;
+			} else {
+				return sorteio2;
+			}
+		}
+		return -1;
+	}
+
+	public static List<Arvore> reinsercaoNsga2(List<Arvore> populacao, int quantidadePopulacao) {
+		List<Arvore> novaPopulacao = new ArrayList<Arvore>();
+		int fronteiraAtual = 0;
+		Fronteira fronteira = new Fronteira(0);
+		List<Fronteira> fronteiras = new ArrayList<>();
+		
+		for(int i = 0; i < populacao.size(); i++) {
+			if(fronteiraAtual != populacao.get(i).getFronteira()) {
+				fronteiraAtual = populacao.get(i).getFronteira();
+				fronteira = new Fronteira(fronteiraAtual);
+			}
+			fronteira.getIndividuos().add(populacao.get(i));
+			if(i+1 == populacao.size() || populacao.get(i+1).getFronteira() != fronteiraAtual) {
+				fronteiras.add(fronteira);
+			}
+		}
+		
+		for(int i = 0; i < fronteiras.size(); i++) {
+			if(fronteiras.get(i).getIndividuos().size() <= quantidadePopulacao - novaPopulacao.size()) {
+				for(int j = 0; j < fronteiras.get(i).getIndividuos().size(); j++) {
+					novaPopulacao.add(fronteiras.get(i).getIndividuos().get(j));
+				}
+			} else {
+				Collections.sort(populacao, new Comparator<Arvore>(){
+			        public int compare(Arvore first, Arvore second){
+			        	if (first.getCrowdingDistance() < second.getCrowdingDistance()) { 
+			      		  return -1; 
+			      		  } if (first.getCrowdingDistance() > second.getCrowdingDistance()) { 
+			      		  return 1; 
+			      		  } 
+			      		  return 0; 
+			      		 }
+			        });
+				for(int j = novaPopulacao.size(), k = 0; j < quantidadePopulacao; j++, k++) {
+					novaPopulacao.add(fronteiras.get(i).getIndividuos().get(k));
+				}
+			}
+		}
+		return novaPopulacao;
+	}
+	
+	public static void spea2(List<Arvore> populacao, boolean[] funcoes, int[] destinos) {
+		
+		for(Arvore a : populacao) {
+			a.setCusto(calculaCusto(a));
+			a.setDelay(delay(a, destinos));
+		}
+		
+		int quantidadeDeObjetivos = 0;
+		for(boolean funcao : funcoes) {
+			if(funcao) {
+				quantidadeDeObjetivos++;
+			}
+		}
+		
+		//Função 1 sempre esta presente
+		for(Arvore arvore : populacao) {
+			arvore.setFuncao1(funcao1(arvore.getCusto()));
+		}
+		
+		for(Arvore arvore : populacao) {
+			if(quantidadeDeObjetivos == 2) {
+				for(int i = 1; i < funcoes.length; i++) {
+					if(funcoes[i] && i == 1) {
+						arvore.setFuncao2(funcao2(arvore.getDelay()));
+						break;
+					} else if(funcoes[i] && i == 2) {
+						arvore.setFuncao2(funcao3(arvore, destinos));
+						break;
+					} else if(funcoes[i] && i == 3) {
+						arvore.setFuncao2(funcao4(arvore, destinos));
+						break;
+					}
+				}
+			} else if(quantidadeDeObjetivos == 3) {
+				boolean funcao3 = false;
+				for(int i = 1; i < funcoes.length; i++) {
+					if(funcoes[i] && i == 1) {
+						arvore.setFuncao2(funcao2(arvore.getDelay()));
+						funcao3 = true;
+					}
+					if(!funcao3 && funcoes[i] && i == 2) {
+						arvore.setFuncao2(funcao3(arvore, destinos));
+						funcao3 = true;
+					}
+					if(!funcao3 && funcoes[i] && i == 2) {
+						arvore.setFuncao3(funcao3(arvore, destinos));
+						break;
+					}
+					if(funcoes[i] && i == 3) {
+						arvore.setFuncao3(funcao4(arvore, destinos));
+						break;
+					}
+				}
+			} else {
+				System.out.println("Deu ruim");
+			}
+		}
+		 
+		 quantidadeDeIndividuosDominantes(populacao, quantidadeDeObjetivos, funcoes);
+		 
+		 calculaStrengths(populacao, funcoes, quantidadeDeObjetivos);
+		 
+		 calculaDensidade(populacao, quantidadeDeObjetivos);
+		 
+		 for(Arvore ar : populacao) {
+			 ar.setAptidao(ar.getStrengths() + ar.getDensidade());
+		 }
+	}
+	
+	public static void quantidadeDeIndividuosDominantes(List<Arvore> populacao, int quantidadeObjetivos, boolean[] funcoes) {
+		for(Arvore ar : populacao) {
+			int cont = 0;
+			for(Arvore ar2 : populacao) {
+				if(quantidadeObjetivos == 2 && ar.getFuncao1() > ar2.getFuncao1() && (funcoes[1] && ar.getFuncao2() > ar2.getFuncao2() || !funcoes[1] && ar.getFuncao2() < ar2.getFuncao2())) {
+					cont++;
+				}
+				if(quantidadeObjetivos == 3 && ar.getFuncao1() > ar2.getFuncao1() && (funcoes[1] && ar.getFuncao2() > ar2.getFuncao2() || !funcoes[1] && ar.getFuncao2() < ar2.getFuncao2()) && ar.getFuncao3() < ar2.getFuncao3()) {
+					cont++;
+				}
+			}
+			ar.setNumeroDominados(cont);
+		}
+	}
+	
+	private static void calculaStrengths(List<Arvore> populacao, boolean[] funcoes, int quantidadeObjetivos) {
+		for(Arvore ar : populacao) {
+			if(ar.getFronteira() != 1) {
+				for(Arvore ar2 : populacao) {
+					if(quantidadeObjetivos == 2 && ar.getFuncao1() < ar2.getFuncao1() && (funcoes[1] && ar.getFuncao2() < ar2.getFuncao2() || !funcoes[1] && ar.getFuncao2() > ar2.getFuncao2())) {
+						ar.setStrengths(ar.getStrengths() + ar2.getNumeroDominados());
+					}
+					if(quantidadeObjetivos == 3 && ar.getFuncao1() < ar2.getFuncao1() && (funcoes[1] && ar.getFuncao2() < ar2.getFuncao2() || !funcoes[1] && ar.getFuncao2() > ar2.getFuncao2()) && ar.getFuncao3() > ar2.getFuncao3()) {
+						ar.setStrengths(ar.getStrengths() + ar2.getNumeroDominados());
+					}
+				}
+			}
+		}
+	}
+	
+	private static void calculaDensidade(List<Arvore> populacao, int quantidadeObjetivos) {
+		for(Arvore ar: populacao) {
+			ar.setDensidade(1.0/(vizinhoMaisProximo(populacao, ar, quantidadeObjetivos) + 1.0));
+		}
+	}
+	
+	private static double vizinhoMaisProximo(List<Arvore> populacao, Arvore arvore, int quantidadeObjetivos) {
+		double menorDistancia = -1;
+		for(Arvore ar : populacao) {
+			double distancia = distanciaEntreDoisPontos(arvore, ar, quantidadeObjetivos);
+			if(menorDistancia == -1 || menorDistancia > distancia || menorDistancia == 0) {
+				menorDistancia = distancia;
+			}
+		}
+		if(menorDistancia == -1) {
+			menorDistancia = 0;
+		}
+		return menorDistancia;
+	}
+	
+	private static double distanciaEntreDoisPontos(Arvore arvore1, Arvore arvore2, int quantidadeObjetivos) {
+		if(quantidadeObjetivos == 2) {
+			return Math.sqrt(Math.pow(arvore2.getFuncao1() - arvore1.getFuncao1(), 2) + Math.pow(arvore2.getFuncao2() - arvore1.getFuncao2(), 2));
+		} else {
+			return Math.sqrt(Math.pow(arvore2.getFuncao1() - arvore1.getFuncao1(), 2) + Math.pow(arvore2.getFuncao2() - arvore1.getFuncao2(), 2) + Math.pow(arvore2.getFuncao3() - arvore1.getFuncao3(), 2));
+		}
+	}
+	
+	private static double errorRate(List<Arvore> populacao, String algoritmo) {
+		int contador = 0;
+		if("nsga2".equals(algoritmo)) {
+			for(Arvore ar : populacao) {
+				if(ar.getFronteira() == 1) {
+					contador++;
+				}
+			}
+			return (double)populacao.size()/(double)contador;
+		}
+		if("spea2".equals(algoritmo)) {
+			for(Arvore ar: populacao) {
+				if(ar.getStrengths() == 0) {
+					contador++;
+				}
+			}
+			return (double)populacao.size()/(double)contador;
+		}
+		return 0;
+	}
+	
+	private static void mostraOtimoPareto(List<Arvore> populacao, String algoritmo) {
+		int contador = 0;
+		if("nsga2".equals(algoritmo)) {
+			for(Arvore ar : populacao) {
+				if(ar.getFronteira() == 1) {
+					contador++;
+					System.out.println(String.format(contador + " - Custo: " + ar.getCusto() + "\t delay: " + ar.getDelay() + "\t Funcao 1: %.5f\t Funcao 2: %.5f\t Funcao 3: %.5f", ar.getFuncao1(), ar.getFuncao2(), ar.getFuncao3()));
+				}
+			}
+		}
+		if("spea2".equals(algoritmo)) {
+			for(Arvore ar : populacao) {
+				if(ar.getStrengths() == 0) {
+					contador++;
+					System.out.println(String.format(contador + " - Custo: " + ar.getCusto() + "\t delay: " + ar.getDelay() + "\t Funcao 1: %.5f\t Funcao 2: %.5f\t Funcao 3: %.5f", ar.getFuncao1(), ar.getFuncao2(), ar.getFuncao3()));
+				}
+			}
+		}
+	}
+	
+	private static double paretoSubset(List<Arvore> populacao, String algoritmo) {
+		return Math.abs((1.0 - errorRate(populacao, algoritmo))) * populacao.size();
+	}
+	
+	private static int torneio3(List<Arvore> populacao) {
+		Random rand = new Random();
+		
+		int sorteio1 = rand.nextInt(populacao.size());
+		int sorteio2 = rand.nextInt(populacao.size());
+		int sorteio3 = rand.nextInt(populacao.size());
+		
+		while(sorteio1 == sorteio2) {
+			sorteio2 = rand.nextInt(populacao.size());
+		}
+		
+		while(sorteio3 == sorteio1 || sorteio3 == sorteio2) {
+			sorteio3 = rand.nextInt(populacao.size());
+		}
+		
+		if(populacao.get(sorteio1).getAptidao() < populacao.get(sorteio2).getAptidao() && populacao.get(sorteio1).getAptidao() < populacao.get(sorteio3).getAptidao()) {
+			return sorteio1;
+		} else if(populacao.get(sorteio2).getAptidao() < populacao.get(sorteio1).getAptidao() && populacao.get(sorteio2).getAptidao() < populacao.get(sorteio3).getAptidao()) {
+			return sorteio2;
+		} else {
+			return sorteio3;
+		}
+	}
+	
+	private static double spread(List<Arvore> populacao, boolean[] funcoes) {
+		
+		int quantidadeDeObjetivos = 0;
+		double spread = 0;
+		for(boolean funcao : funcoes) {
+			if(funcao) {
+				quantidadeDeObjetivos++;
+			}
+		}
+		
+		if(quantidadeDeObjetivos == 2) {
+			int melhorFuncao1 = -1;
+			int melhorFuncao2 = -1;
+			for(int i = 0; i < populacao.size(); i++) {
+				if(melhorFuncao1 == -1 || populacao.get(melhorFuncao1).getFuncao1() < populacao.get(i).getFuncao1()) {
+					melhorFuncao1 = i;
+				}
+				if(melhorFuncao2 == -1 || (funcoes[1] && populacao.get(melhorFuncao2).getFuncao2() < populacao.get(i).getFuncao2()) || (!funcoes[1] && populacao.get(melhorFuncao2).getFuncao2() > populacao.get(i).getFuncao2())) {
+					melhorFuncao2 = i;
+				}
+			}
+			double distanciaEntreExtremos = distanciaEntreDoisPontos(populacao.get(melhorFuncao1), populacao.get(melhorFuncao2), quantidadeDeObjetivos);
+			
+			Fronteira fronteira = new Fronteira(0);
+			
+			if(populacao.get(0).getFronteira() == 0) { //spea2
+				fronteira = procuraFronteiraSpea(populacao);
+			} else { //nsga2
+				List<Fronteira> fronteiras = encontraFronteiras(populacao, quantidadeDeObjetivos, funcoes);
+				fronteira = fronteiras.get(0);
+			}
+		} else {
+			int melhorFuncao1 = -1;
+			int melhorFuncao2 = -1;
+			int melhorFuncao3 = -1;
+			for(int i = 0; i < populacao.size(); i++) {
+				if(melhorFuncao1 == -1 || populacao.get(melhorFuncao1).getFuncao1() < populacao.get(i).getFuncao1()) {
+					melhorFuncao1 = i;
+				}
+				if(melhorFuncao2 == -1 || (funcoes[1] && populacao.get(melhorFuncao2).getFuncao2() < populacao.get(i).getFuncao2()) || (!funcoes[1] && populacao.get(melhorFuncao2).getFuncao2() > populacao.get(i).getFuncao2())) {
+					melhorFuncao2 = i;
+				}
+				if(melhorFuncao3 == -1 || populacao.get(melhorFuncao3).getFuncao3() > populacao.get(i).getFuncao3()) {
+					melhorFuncao3 = i;
+				}
+			}
+			double distanciaEntreExtremos = distanciaEntreDoisPontos(populacao.get(melhorFuncao1), populacao.get(melhorFuncao2), quantidadeDeObjetivos);
+			distanciaEntreExtremos += distanciaEntreDoisPontos(populacao.get(melhorFuncao1), populacao.get(melhorFuncao3), quantidadeDeObjetivos);
+			distanciaEntreExtremos += distanciaEntreDoisPontos(populacao.get(melhorFuncao2), populacao.get(melhorFuncao3), quantidadeDeObjetivos);
+			
+			Fronteira fronteira = new Fronteira(0);
+			
+			if(populacao.get(0).getFronteira() == 0) { //spea2
+				fronteira = procuraFronteiraSpea(populacao);
+			} else { //nsga2
+				List<Fronteira> fronteiras = encontraFronteiras(populacao, quantidadeDeObjetivos, funcoes);
+				fronteira = fronteiras.get(0);
+			}
+		}
+		return 0;
+	}
+	
+	public static Fronteira procuraFronteiraSpea(List<Arvore> populacao) {
+		Fronteira fronteira = new Fronteira(1);
+		for(Arvore ar : populacao) {
+			if(ar.getStrengths() == 0) {
+				fronteira.getIndividuos().add(ar);
+			}
+		}
+		return fronteira;
+	}
+	
+	/*public static double calculoDistanciaMedia(Fronteira fronteira) {
+		
+	}
+	
+	public static double calculoDistanciaVizinhos(Fronteira fronteira, Arvore arvore, int quantidadeDeObjetivos) {
+		int menor = -1;
+		int maior = -1;
+		for(Arvore ar : fronteira.getIndividuos()) {
+			if(ar.get)
+		}
+	}*/
 }
